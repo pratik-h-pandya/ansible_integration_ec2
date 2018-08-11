@@ -1,0 +1,40 @@
+---
+- name: Creating a Security Group for Load Balancer
+  ec2_group:
+    name: "{{ lb_sg_name }}"
+    description: My LoadBalancer Security Group
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    rules:
+      - proto: tcp
+        ports:
+          - 80
+        cidr_ip: 0.0.0.0/0
+        rule_desc: allow all on port 80
+  register: testsglb_out
+- ec2_elb_lb:
+    name: "{{ my_load_balancer_name }}"
+    state: present
+    region: "{{ region }}"
+    security_group_names: 
+      - "{{ lb_sg_name }}"
+    # zones:
+    #   - us-east-1a
+    #Use SubNet instead of Zones, with Subnet it will automatically find zones
+    subnets:
+      - "{{ vpc_subnet_id }}"
+    listeners:
+      - protocol: http #options are http, https, ssl, tcp
+        load_balancer_port: 80
+        instance_port: 80
+- debug:
+    # msg: "Status of Creating Load Balancer Security Group is Successful with Security Id : {{ testsglb_out.group_id }}"
+    var: testsglb_out
+  when: testsglb_out is succeeded        
+- name: Register Instances with LB
+  ec2_elb:
+    instance_id: "{{ item.id }}"
+    ec2_elbs: "{{  my_load_balancer_name }}"
+    region: "{{ region }}"
+    state: present
+  loop: "{{ instances_out.tagged_instances }}"

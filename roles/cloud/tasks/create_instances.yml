@@ -1,0 +1,36 @@
+---
+- name: Create EC2 instances
+  ec2:
+    key_name: "{{ keypair_name }}"
+    instance_type: "{{ instance_type }}"
+    image: "{{ ami_id }}"
+    region: "{{ region }}"
+    wait: yes
+    group: "{{ testsg_out.group_name }}"
+#     count: "{{ no_of_instances }}"
+    vpc_subnet_id: "{{ vpc_subnet_id }}"
+    assign_public_ip: yes
+    instance_tags:
+      Name: "{{ instancename }}"
+    exact_count: "{{ no_of_instances }}"
+    count_tag: 
+      Name: "{{ instancename }}"
+  register: instances_out
+- debug:
+   var: instances_out
+- name: Add hosts to groups
+  add_host:
+    name: "{{ item.dns_name }}"
+    group: "{{ group }}"
+  loop: "{{ instances_out.tagged_instances }}"
+  register: add_host_out
+- debug:
+    var: add_host_out
+- name: wait for the instances to start
+  wait_for:
+    host: "{{ item.dns_name }}"
+    port: 22
+    delay: 10
+    timeout: 320
+    state: started
+  loop: "{{ instances_out.tagged_instances }}"

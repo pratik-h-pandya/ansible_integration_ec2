@@ -1,0 +1,19 @@
+---
+- name: Creating a Security Group
+  ec2_group:
+    name: "{{ sg_name }}"
+    description: My Webserver Security Group
+    vpc_id: "{{ vpc_id }}"
+    region: "{{ region }}"
+    rules:
+      - proto: tcp
+        ports:
+          - 80
+          - 22
+        cidr_ip: 0.0.0.0/0
+        rule_desc: allow all on port 80 and 22
+  register: testsg_out
+- debug: 
+    msg: "Status of Creating Security Group is Successful with Security Id : {{ testsg_out.group_id }}"
+#        var: testsg_out
+  when: testsg_out is succeeded

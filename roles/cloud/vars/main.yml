@@ -1,0 +1,13 @@
+---
+sg_name: testsg
+lb_sg_name: test_lb_sg
+vpc_id: vpc-bd754ec6
+region: us-east-1
+group: webservers
+keypair_name: my_keypair_test
+instance_type: t2.micro
+ami_id: ami-6871a115
+vpc_subnet_id: subnet-d8b27384
+no_of_instances: 2
+instancename: webservers
+my_load_balancer_name: test-please-delete

@@ -1,0 +1,29 @@
+---
+- name: ensure apache is at the latest version
+  yum:
+    name: httpd
+    state: latest
+- name: ensure apache is running
+  service:
+    name: httpd
+    state: started
+    enabled: yes
+- name: Templating the httpd.conf
+  template: 
+    src: httpd.j2
+    dest: /etc/httpd/conf/httpd.conf
+  notify: restart apache
+- name: copy resources to instance
+  copy:
+    src: index.html
+    dest: /var/www/html/index.html
+  # - name: Terminate EC2 instances
+  #   ec2:
+  #     state: 'absent'
+  #     wait: yes
+  #     wait_timeout: 300
+  #     region: "{{ region }}"
+  #     instance_tags:
+  #       Name: "{{ instancename }}"
+  #     instance_ids: "{{ item.id }}"
+  #   loop: "{{ instances_out.tagged_instances }}"

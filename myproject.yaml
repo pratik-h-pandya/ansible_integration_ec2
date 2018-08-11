@@ -1,0 +1,159 @@
+---
+- hosts: localhost
+  vars: 
+    sg_name: testsg
+    lb_sg_name: test_lb_sg
+    vpc_id: vpc-bd754ec6
+    region: us-east-1
+    group: webservers
+    keypair_name: my_keypair_test
+    instance_type: t2.micro
+    ami_id: ami-6871a115
+    vpc_subnet_id: subnet-d8b27384
+    no_of_instances: 2
+    instancename: webservers
+    my_load_balancer_name: test-please-delete
+  tasks:
+    - name: Creating a Security Group
+      ec2_group:
+        name: "{{ sg_name }}"
+        description: My Webserver Security Group
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 80
+              - 22
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow all on port 80 and 22
+      register: testsg_out
+    - debug: 
+        msg: "Status of Creating Security Group is Successful with Security Id : {{ testsg_out.group_id }}"
+#        var: testsg_out
+      when: testsg_out is succeeded
+    - name: Generate Key Pair
+      ec2_key:
+        name: "{{ keypair_name }}"
+        key_material: "{{ lookup('file', '/home/ec2-user/environment/ansible_integration_ec2/my-key.pub') }}"
+      register: my_keypair_out
+    - debug:
+        var: my_keypair_out
+    - name: Create EC2 instances
+      ec2:
+        key_name: "{{ keypair_name }}"
+        instance_type: "{{ instance_type }}"
+        image: "{{ ami_id }}"
+        region: "{{ region }}"
+        wait: yes
+        group: "{{ testsg_out.group_name }}"
+#        count: "{{ no_of_instances }}"
+        vpc_subnet_id: "{{ vpc_subnet_id }}"
+        assign_public_ip: yes
+        instance_tags:
+          Name: "{{ instancename }}"
+        exact_count: "{{ no_of_instances }}"
+        count_tag: 
+          Name: "{{ instancename }}"
+      register: instances_out
+    - debug:
+       var: instances_out
+    - name: Add hosts to groups
+      add_host:
+        name: "{{ item.dns_name }}"
+        group: "{{ group }}"
+      loop: "{{ instances_out.tagged_instances }}"
+      register: add_host_out
+    - debug:
+        var: add_host_out
+    - name: wait for the instances to start
+      wait_for:
+        host: "{{ item.dns_name }}"
+        port: 22
+        delay: 10
+        timeout: 320
+        state: started
+      loop: "{{ instances_out.tagged_instances }}"
+    - name: Creating a Security Group for Load Balancer
+      ec2_group:
+        name: "{{ lb_sg_name }}"
+        description: My LoadBalancer Security Group
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 80
+            cidr_ip: 0.0.0.0/0
+            rule_desc: allow all on port 80
+      register: testsglb_out
+    - ec2_elb_lb:
+        name: "{{ my_load_balancer_name }}"
+        state: present
+        region: "{{ region }}"
+        security_group_names: 
+          - "{{ lb_sg_name }}"
+        # zones:
+        #   - us-east-1a
+# Use SubNet instead of Zones, with Subnet it will automatically find zones
+        subnets:
+          - "{{ vpc_subnet_id }}"
+        listeners:
+          - protocol: http #options are http, https, ssl, tcp
+            load_balancer_port: 80
+            instance_port: 80
+    - debug:
+        # msg: "Status of Creating Load Balancer Security Group is Successful with Security Id : {{ testsglb_out.group_id }}"
+        var: testsglb_out
+      when: testsglb_out is succeeded        
+    - name: Register Instances with LB
+      ec2_elb:
+        instance_id: "{{ item.id }}"
+        ec2_elbs: "{{  my_load_balancer_name }}"
+        region: "{{ region }}"
+        state: present
+      loop: "{{ instances_out.tagged_instances }}"
+- name: Configure instances
+  hosts: webservers
+  vars:
+    ansible_ssh_private_key_file: /home/ec2-user/environment/ansible_integration_ec2/my-new-key.pem  
+  become: true
+  gather_facts: true
+  remote_user: ec2-user
+  tasks:
+  - name: ensure apache is at the latest version
+    yum:
+      name: httpd
+      state: latest
+  - name: ensure apache is running
+    service:
+      name: httpd
+      state: started
+      enabled: yes
+  - name: Templating the httpd.conf
+    template: 
+      src: /home/ec2-user/environment/ansible_integration_ec2/httpd.j2
+      dest: /etc/httpd/conf/httpd.conf
+    notify: restart apache
+  handlers:
+    - name: restart apache
+      service: 
+        name: httpd
+        state: restarted
+#   - name: copy resources to instance
+#     copy:
+#       src: /home/ec2-user/environment/files/index.html
+#       dest: /var/www/html/index.html
+    # - name: Terminate EC2 instances
+    #   ec2:
+    #     state: 'absent'
+    #     wait: yes
+    #     wait_timeout: 300
+    #     region: "{{ region }}"
+    #     instance_tags:
+    #       Name: "{{ instancename }}"
+    #     instance_ids: "{{ item.id }}"
+    #   loop: "{{ instances_out.tagged_instances }}"
+       
+              
+    
